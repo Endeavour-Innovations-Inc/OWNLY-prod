@@ -99,3 +99,7 @@ Twitter: [@reservoir0x](https://twitter.com/reservoir0x)
 Project Link: [Reservoir](https://reservoirprotocol.github.io/)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
+
+-- Lists of path for the project:
+1. CollectionRankingsTable.tsx -> view responsible for categories naming
+2. C:\Users\Al\Desktop\Resumes\marketplace-v2\pages\[chain]\index.tsx -> Path to change second headers under the trading

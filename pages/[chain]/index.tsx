@@ -152,31 +152,6 @@ const Home: NextPage<Props> = ({ ssr }) => {
           },
         }}
       >
-        <Box
-          css={{
-            mb: 64,
-          }}
-        >
-          <Flex
-            justify="between"
-            align="start"
-            css={{
-              gap: 24,
-              mb: '$4',
-            }}
-          >
-            <Text style="h4" as="h4">
-              Featured
-            </Text>
-          </Flex>
-          <Box
-            css={{
-              height: '100%',
-            }}
-          >
-            <FeaturedCards collections={featuredCollections} />
-          </Box>
-        </Box>
 
         <Tabs.Root
           onValueChange={(tab) => setTab(tab as TabValue)}
@@ -211,9 +186,10 @@ const Home: NextPage<Props> = ({ ssr }) => {
               </Flex>
             )}
           </Flex>
+          {/* Here the second headers can be modified */}
           <TabsList css={{ mb: 24, mt: 0, borderBottom: 'none' }}>
-            <TabsTrigger value="collections">Collections</TabsTrigger>
-            <TabsTrigger value="mints">Mints</TabsTrigger>
+            <TabsTrigger value="collections">Overview</TabsTrigger>
+            <TabsTrigger value="mints">My Assets</TabsTrigger>
           </TabsList>
           {isSmallDevice && (
             <Flex

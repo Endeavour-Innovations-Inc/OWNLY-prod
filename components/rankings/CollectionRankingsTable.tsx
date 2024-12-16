@@ -340,13 +340,14 @@ const RankingsTableRow: FC<RankingsTableRowProps> = ({
   }
 }
 
+// here modify the headings of the NFTs
 const headings = [
-  'Collection',
-  'Floor Price',
-  'Volume',
-  '1D Change',
-  '7D Change',
-  'Supply',
+  'Content',
+  'Creator',
+  'Total Volume',
+  'Views',
+  'Total Supply',
+  'Circullating Supply',
   'Sample Tokens',
 ]
 

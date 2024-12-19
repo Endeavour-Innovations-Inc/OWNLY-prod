@@ -195,146 +195,95 @@ const RankingsTableRow: FC<RankingsTableRowProps> = ({
           ...gridColumns,
         }}
       >
-        <TableCell css={{ minWidth: 0 }}>
-          <Link
-            href={`/${routePrefix}/collection/${collection.id}`}
-            style={{ display: 'inline-block', width: '100%', minWidth: 0 }}
-          >
-            <Flex
-              align="center"
-              css={{
-                gap: '$4',
-                cursor: 'pointer',
-                minWidth: 0,
-                overflow: 'hidden',
-                width: '100$',
-              }}
-            >
-              <Text css={{ minWidth: 15 }} style="h6" color="subtle">
-                {rank}
-              </Text>
-              <Img
-                src={collectionImage}
-                css={{
-                  borderRadius: 8,
-                  width: 52,
-                  height: 52,
-                  objectFit: 'cover',
-                }}
-                alt="Collection Image"
-                width={52}
-                height={52}
-                unoptimized
-              />
-
-              <Flex css={{ gap: '$1', minWidth: 0 }} align="center">
-                <Text
+        {/* Render all TableCells except the last one */}
+        {headings.slice(0, -1).map((_, i) => (
+          <TableCell key={i}>
+            {i === 0 && (
+              <Link
+                href={`/${routePrefix}/collection/${collection.id}`}
+                style={{ display: 'inline-block', width: '100%', minWidth: 0 }}
+              >
+                <Flex
+                  align="center"
                   css={{
-                    display: 'inline-block',
+                    gap: '$4',
+                    cursor: 'pointer',
                     minWidth: 0,
+                    overflow: 'hidden',
+                    width: '100$',
                   }}
-                  style="h6"
-                  ellipsify
                 >
-                  {collection?.name}
-                </Text>
-                <OpenSeaVerified
-                  openseaVerificationStatus={
-                    collection?.openseaVerificationStatus
-                  }
-                />
-              </Flex>
-            </Flex>
-          </Link>
-        </TableCell>
-        <TableCell>
-          <Flex
-            direction="column"
-            align="start"
-            justify="start"
-            css={{ height: '100%' }}
-          >
-            <FormatCryptoCurrency
-              amount={collection?.floorAsk?.price?.amount?.decimal}
-              address={collection?.floorAsk?.price?.currency?.contract}
-              decimals={collection?.floorAsk?.price?.currency?.decimals}
-              textStyle="subtitle1"
-              logoHeight={14}
-            />
-          </Flex>
-        </TableCell>
-        <TableCell>
-          <Flex
-            direction="column"
-            align="start"
-            justify="start"
-            css={{ height: '100%' }}
-          >
-            <FormatCryptoCurrency
-              amount={collection?.collectionVolume?.[volumeKey]}
-              textStyle="subtitle1"
-              logoHeight={14}
-            />
-          </Flex>
-        </TableCell>
-        <TableCell desktopOnly>
-          {collection?.volumeChange?.['1day'] ? (
-            <PercentChange
-              style="subtitle1"
-              value={collection?.volumeChange?.['1day']}
-            />
-          ) : (
-            '-'
-          )}
-        </TableCell>
-        <TableCell desktopOnly>
-          {collection?.volumeChange?.['7day'] ? (
-            <PercentChange
-              style="subtitle1"
-              value={collection?.volumeChange?.['7day']}
-            />
-          ) : (
-            '-'
-          )}
-        </TableCell>
-        <TableCell desktopOnly>
-          <Text style="subtitle1">
-            {Number(collection?.tokenCount)?.toLocaleString()}
-          </Text>
-        </TableCell>
-        <TableCell desktopOnly>
-          <Flex
-            css={{
-              gap: '$2',
-              minWidth: 0,
-            }}
-            justify={'end'}
-          >
-            {collection?.sampleImages?.map((image, i) => {
-              if (image) {
-                return (
-                  <img
-                    key={image + i}
-                    src={optimizeImage(image, 104)}
-                    loading="lazy"
-                    style={{
+                  <Text css={{ minWidth: 15 }} style="h6" color="subtle">
+                    {rank}
+                  </Text>
+                  <Img
+                    src={collectionImage}
+                    css={{
                       borderRadius: 8,
                       width: 52,
                       height: 52,
                       objectFit: 'cover',
                     }}
-                    onError={(
-                      e: React.SyntheticEvent<HTMLImageElement, Event>
-                    ) => {
-                      e.currentTarget.style.visibility = 'hidden'
-                    }}
+                    alt="Collection Image"
+                    width={52}
+                    height={52}
+                    unoptimized
                   />
-                )
-              }
-              return null
-            })}
-          </Flex>
-        </TableCell>
+                  <Flex css={{ gap: '$1', minWidth: 0 }} align="center">
+                    <Text
+                      css={{
+                        display: 'inline-block',
+                        minWidth: 0,
+                      }}
+                      style="h6"
+                      ellipsify
+                    >
+                      {collection?.name}
+                    </Text>
+                    <OpenSeaVerified
+                      openseaVerificationStatus={
+                        collection?.openseaVerificationStatus
+                      }
+                    />
+                  </Flex>
+                </Flex>
+              </Link>
+            )}
+            {i === 1 && (
+              <FormatCryptoCurrency
+                amount={collection?.floorAsk?.price?.amount?.decimal}
+                address={collection?.floorAsk?.price?.currency?.contract}
+                decimals={collection?.floorAsk?.price?.currency?.decimals}
+                textStyle="subtitle1"
+                logoHeight={14}
+              />
+            )}
+            {i === 2 && (
+              <FormatCryptoCurrency
+                amount={collection?.collectionVolume?.[volumeKey]}
+                textStyle="subtitle1"
+                logoHeight={14}
+              />
+            )}
+            {i === 3 && (
+              <PercentChange
+                style="subtitle1"
+                value={collection?.volumeChange?.['1day']}
+              />
+            )}
+            {i === 4 && (
+              <PercentChange
+                style="subtitle1"
+                value={collection?.volumeChange?.['7day']}
+              />
+            )}
+            {i === 5 && (
+              <Text style="subtitle1">
+                {Number(collection?.tokenCount)?.toLocaleString()}
+              </Text>
+            )}
+          </TableCell>
+        ))}
       </TableRow>
     )
   }
@@ -363,11 +312,11 @@ const TableHeading: React.FC<Pick<Props, 'volumeKey'>> = ({ volumeKey }) => (
       zIndex: 1,
     }}
   >
-    {headings.map((heading, i) => (
+    {headings.slice(0, -1).map((heading, i) => (
       <TableCell
         desktopOnly={i > 2}
         key={heading}
-        css={{ textAlign: i === headings.length - 1 ? 'right' : 'left' }}
+        css={{ textAlign: i === headings.length - 2 ? 'right' : 'left' }}
       >
         <Text style="subtitle3" color="subtle">
           {heading === 'Volume' && `${volumeKey.replace('day', 'D')} `}

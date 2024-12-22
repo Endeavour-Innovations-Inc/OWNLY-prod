@@ -105,4 +105,5 @@ Project Link: [Reservoir](https://reservoirprotocol.github.io/)
 2. C:\Users\Al\Desktop\Resumes\marketplace-v2\pages\[chain]\index.tsx -> Path to change second headers under the trading
 3. C:\Users\Al\Desktop\Resumes\marketplace-v2\pages\[chain]\index.tsx -> Amount of items in the table is set there
 4. components\home\FeaturedCards.tsx -> This element is where the static data is being displayed, it is a static UI element, need to figure out how to make a call to it
-5. 
+5. pages\[chain]\collection\[contract].tsx -> Rendering the type of contract is displayed there
+6. pages\[chain]\index.tsx -> I think it is the code responsible for rendering FE

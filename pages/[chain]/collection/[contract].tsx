@@ -334,6 +334,7 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
   const hasSecurityConfig =
     typeof collection?.securityConfig?.transferSecurityLevel === 'number'
 
+  // contract kind is being assigned here, see how the parsing is being done
   const contractKind = `${collection?.contractKind?.toUpperCase()}${
     hasSecurityConfig ? 'C' : ''
   }`
@@ -499,6 +500,7 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
                         >
                           <FontAwesomeIcon size="xs" icon={faCog} />
                         </Flex>
+                        {/* Element here responsible for displaying which type of contract it is */}
                         <Text style="body3">{contractKind}</Text>
                       </Flex>
 

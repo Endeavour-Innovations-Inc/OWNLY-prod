@@ -288,6 +288,7 @@ export const getServerSideProps: GetServerSideProps<{
   }
 }> = async ({ params, res }) => {
   const chainPrefix = params?.chain || ''
+  // defines which endpoint to use for each specific chain
   const { reservoirBaseUrl } =
     supportedChains.find((chain) => chain.routePrefix === chainPrefix) ||
     DefaultChain
@@ -298,12 +299,28 @@ export const getServerSideProps: GetServerSideProps<{
     },
   }
 
+  /*
   // How many items will be displayed is controlled here
   let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
     {
       period: '24h',
-      limit: 10,
+      limit: 5,
       sortBy: 'volume',
+    }
+
+  const trendingCollectionsPromise = fetcher(
+    `${reservoirBaseUrl}/collections/trending/v1`,
+    trendingCollectionsQuery,
+    headers
+  )
+  */
+
+  // How many items will be displayed is controlled here
+  let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
+    {
+      period: '1h',
+      limit: 5,
+      sortBy: 'sales',
     }
 
   const trendingCollectionsPromise = fetcher(

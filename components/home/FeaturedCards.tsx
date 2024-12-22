@@ -13,20 +13,21 @@ dotenv.config();
 // Define the function to fetch data
 async function fetchTrendingCollections() {
     try {
-        const response = await axios.get('https://api.reservoir.tools/collections/trending/v1', {
+        const response = await axios.get('https://api.reservoir.tools/collections/trending-mints/v2', {
             headers: {
                 'Accept': '*/*',
                 'X-API-Key': process.env.RESERVOIR_API_KEY
             }
         });
-        return response.data;
+        console.log("API Fetch Response:", response.data); // Log the raw API response
+        return null;
     } catch (err) {
         console.error('Failed to fetch trending collections:', err);
         throw err;
     }
 }
 
-type TrendingCollections = any[];  // Update the type definition appropriately
+type TrendingCollections = any[];  // Assuming you have a more specific type
 
 type FeaturedCardsProps = {
     collections: TrendingCollections;
@@ -37,22 +38,26 @@ export const FeaturedCards: React.FC<FeaturedCardsProps> = ({
     collections,
     loading,
 }) => {
-    const [localCollections, setLocalCollections] = useState<TrendingCollections>(collections || []);
-    const [isLoading, setLoading] = useState<boolean>(loading || true);
+    const [localCollections, setLocalCollections] = useState<TrendingCollections>([]);
+    const [isLoading, setLoading] = useState<boolean>(true);
     const marketplaceChain = useMarketplaceChain();
 
     useEffect(() => {
-        if (!collections) {  // Only fetch if collections weren't passed as props
-            setLoading(true);
-            fetchTrendingCollections().then(data => {
-                setLocalCollections(data);
-                setLoading(false);
-            }).catch(err => {
-                console.error('Error fetching data:', err);
-                setLoading(false);
-            });
-        }
-    }, [collections]);
+        console.log("Component mount/update - Starting fetch operation.");
+        setLoading(true);
+        fetchTrendingCollections().then(data => {
+            const filteredCollections = data.filter(collection => collection.contractKind === 'erc1155');
+            console.log("Filtered ERC-1155 Collections:", filteredCollections); // Log the filtered collections
+            setLocalCollections(filteredCollections);
+            setLoading(false);
+        }).catch(err => {
+            console.error('Error fetching data:', err);
+            setLoading(false);
+        });
+    }, []);
+
+    console.log("Render - Collections:", localCollections); // Log collections being rendered
+    console.log("Render - Loading state:", isLoading); // Log current loading state
 
     if (!localCollections) return null;
 
@@ -67,7 +72,7 @@ export const FeaturedCards: React.FC<FeaturedCardsProps> = ({
                     <Text css={{ color: '$gray11' }}>
                         <FontAwesomeIcon icon={faMagnifyingGlass} size="2xl" />
                     </Text>
-                    <Text css={{ color: '$gray11' }}>No collections found</Text>
+                    <Text css={{ color: '$gray11' }}>No ERC-1155 collections found</Text>
                 </Flex>
             ) : (
                 <Flex
@@ -81,15 +86,8 @@ export const FeaturedCards: React.FC<FeaturedCardsProps> = ({
                     }}
                 >
                     {localCollections.map((collection) => {
-                        const bannerImage =
-                            collection?.banner ||
-                            collection?.image ||
-                            collection.sampleImages?.[0];
-
-                        const collectionImage =
-                            collection?.image ||
-                            collection?.banner ||
-                            collection.sampleImages?.[0];
+                        const bannerImage = collection?.banner || collection?.image || collection.sampleImages?.[0];
+                        const collectionImage = collection?.image || collection?.banner || collection.sampleImages?.[0];
 
                         return (
                             <Link
@@ -118,23 +116,16 @@ export const FeaturedCards: React.FC<FeaturedCardsProps> = ({
                                             position: 'relative',
                                         }}
                                     >
-                                        <Flex
-                                            css={{
-                                                height: '150px',
-                                                width: '300px',
+                                        <Img
+                                            src={bannerImage as string}
+                                            alt={collection.name as string}
+                                            height={150}
+                                            width={300}
+                                            style={{
+                                                objectFit: 'cover',
+                                                borderRadius: 8,
                                             }}
-                                        >
-                                            <Img
-                                                src={bannerImage as string}
-                                                alt={collection.name as string}
-                                                height={150}
-                                                width={300}
-                                                style={{
-                                                    objectFit: 'cover',
-                                                    borderRadius: 8,
-                                                }}
-                                            />
-                                        </Flex>
+                                        />
                                         <Img
                                             src={collectionImage as string}
                                             alt={collection.name as string}

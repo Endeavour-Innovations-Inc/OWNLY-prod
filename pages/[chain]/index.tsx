@@ -34,6 +34,39 @@ import { useTheme } from 'next-themes'
 import { useRouter } from 'next/router'
 import { useMediaQuery } from 'react-responsive'
 import fetcher from 'utils/fetcher'
+// ──────────────────────────────────────────────────────
+//  ERC165 Helpers (Add these near the top or in a utils file)
+// ──────────────────────────────────────────────────────
+import { Contract, JsonRpcProvider } from 'ethers'
+const ERC165_ABI = [
+  'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
+]
+const ERC721_INTERFACE_ID = '0x80ac58cd'
+const ERC1155_INTERFACE_ID = '0xd9b67a26'
+
+async function checkTokenStandard(
+  contractAddress: string,
+  provider: JsonRpcProvider
+): Promise<'erc721' | 'erc1155' | 'unknown'> {
+  try {
+    const contract = new Contract(contractAddress, ERC165_ABI, provider)
+
+    const is721 = await contract
+      .supportsInterface(ERC721_INTERFACE_ID)
+      .catch(() => false)
+    const is1155 = await contract
+      .supportsInterface(ERC1155_INTERFACE_ID)
+      .catch(() => false)
+
+    if (is1155) return 'erc1155'
+    if (is721) return 'erc721'
+    return 'unknown'
+  } catch (err) {
+    console.error(`Failed to check interface for ${contractAddress}`, err)
+    return 'unknown'
+  }
+}
+// ──────────────────────────────────────────────────────
 
 type TabValue = 'collections' | 'mints'
 
@@ -58,7 +91,6 @@ const Home: NextPage<Props> = ({ ssr }) => {
 
   const [tab, setTab] = useState<TabValue>('collections')
   const [sortByTime, setSortByTime] = useState<CollectionsSortingOption>('24h')
-
   const [sortByPeriod, setSortByPeriod] = useState<MintsSortingOption>('24h')
 
   let mintsQuery: Parameters<typeof useTrendingMints>['0'] = {
@@ -363,6 +395,10 @@ export const getServerSideProps: GetServerSideProps<{
     console.error(e)
   })
 
+  console.log('Trending Collections:', promises[0].status === 'fulfilled' ? promises[0].value.data : 'Failed to fetch');
+  // console.log('Featured Collections:', promises[1].status === 'fulfilled' ? promises[1].value.data : 'Failed to fetch');
+  // console.log('Trending Mints:', promises[2].status === 'fulfilled' ? promises[2].value.data : 'Failed to fetch');
+
   const trendingCollections: Props['ssr']['trendingCollections'] =
     promises?.[0].status === 'fulfilled' && promises[0].value.data
       ? (promises[0].value.data as Props['ssr']['trendingCollections'])
@@ -376,6 +412,31 @@ export const getServerSideProps: GetServerSideProps<{
     promises?.[1].status === 'fulfilled' && promises[1].value.data
       ? (promises[1].value.data as Props['ssr']['trendingMints'])
       : {}
+
+  // 1) Get an ethers provider (Infura, Alchemy, etc.)
+  //    Adjust process.env.* to your environment variable
+  const provider = new JsonRpcProvider(process.env.INFURA_API_URL)
+
+  // 2) Check each trending collection address on-chain
+  if (trendingCollections.collections) {
+    const checks = await Promise.all(
+      trendingCollections.collections.map(async (collection) => {
+        const standard = await checkTokenStandard(collection.id, provider)
+        // Attach this info so we can filter
+        return { ...collection, standard }
+      })
+    )
+
+    // 3) Filter out the ones that are NOT ERC-1155
+    trendingCollections.collections = checks.filter(
+      (c) => c.standard === 'erc1155'
+    )
+  }
+
+  // (Optionally repeat for featuredCollections, trendingMints, etc.
+  //  if those also contain "collections" you’d like to filter.)
+
+  // ──────────────────────────────────────────────────────
 
   res.setHeader(
     'Cache-Control',

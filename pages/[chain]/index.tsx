@@ -351,7 +351,7 @@ export const getServerSideProps: GetServerSideProps<{
   let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
     {
       period: '30d',
-      limit: 5,
+      limit: 50,
       sortBy: 'sales',
     }
 

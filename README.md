@@ -107,3 +107,4 @@ Project Link: [Reservoir](https://reservoirprotocol.github.io/)
 4. components\home\FeaturedCards.tsx -> This element is where the static data is being displayed, it is a static UI element, need to figure out how to make a call to it
 5. pages\[chain]\collection\[contract].tsx -> Rendering the type of contract is displayed there
 6. pages\[chain]\index.tsx -> I think it is the code responsible for rendering FE
+7. C:\Users\Al\Desktop\Resumes\marketplace-v2\components\navbar\index.tsx -> Navbar Element responsible for top header

@@ -34,8 +34,9 @@ import { useTheme } from 'next-themes'
 import { useRouter } from 'next/router'
 import { useMediaQuery } from 'react-responsive'
 import fetcher from 'utils/fetcher'
+
 // ──────────────────────────────────────────────────────
-//  ERC165 Helpers (Add these near the top or in a utils file)
+//  ERC165 Helpers
 // ──────────────────────────────────────────────────────
 import { Contract, JsonRpcProvider } from 'ethers'
 const ERC165_ABI = [
@@ -77,7 +78,6 @@ const Home: NextPage<Props> = ({ ssr }) => {
   const marketplaceChain = useMarketplaceChain()
   const isMounted = useMounted()
 
-  // not sure if there is a better way to fix this
   const { theme: nextTheme } = useTheme()
   const [theme, setTheme] = useState<string | null>(null)
   useEffect(() => {
@@ -93,12 +93,6 @@ const Home: NextPage<Props> = ({ ssr }) => {
   const [sortByTime, setSortByTime] = useState<CollectionsSortingOption>('24h')
   const [sortByPeriod, setSortByPeriod] = useState<MintsSortingOption>('24h')
 
-  let mintsQuery: Parameters<typeof useTrendingMints>['0'] = {
-    limit: 20,
-    period: sortByPeriod,
-    type: 'any',
-  }
-
   const { chain, switchCurrentChain } = useContext(ChainContext)
 
   useEffect(() => {
@@ -113,7 +107,7 @@ const Home: NextPage<Props> = ({ ssr }) => {
         switchCurrentChain(chainIndex)
       }
     }
-  }, [router.query])
+  }, [router.query, switchCurrentChain])
 
   const {
     data: trendingCollections,
@@ -147,8 +141,14 @@ const Home: NextPage<Props> = ({ ssr }) => {
     }
   )
 
+  let mintsQuery: Parameters<typeof useTrendingMints>['0'] = {
+    limit: 20,
+    period: sortByPeriod,
+    type: 'any',
+  }
+
   const { data: trendingMints, isValidating: isTrendingMintsValidating } =
-    useTrendingMints({ ...mintsQuery }, chain.id, {
+    useTrendingMints(mintsQuery, chain.id, {
       fallbackData: ssr.trendingMints,
       keepPreviousData: true,
     })
@@ -184,9 +184,8 @@ const Home: NextPage<Props> = ({ ssr }) => {
           },
         }}
       >
-
         <Tabs.Root
-          onValueChange={(tab) => setTab(tab as TabValue)}
+          onValueChange={(value) => setTab(value as TabValue)}
           defaultValue="collections"
         >
           <Flex justify="between" align="start" css={{ mb: '$3' }}>
@@ -194,19 +193,12 @@ const Home: NextPage<Props> = ({ ssr }) => {
               Trending
             </Text>
             {!isSmallDevice && (
-              <Flex
-                align="center"
-                css={{
-                  gap: '$4',
-                }}
-              >
+              <Flex align="center" css={{ gap: '$4' }}>
                 {tab === 'collections' ? (
                   <CollectionsTimeDropdown
                     compact={isSmallDevice && isMounted}
                     option={sortByTime}
-                    onOptionSelected={(option) => {
-                      setSortByTime(option)
-                    }}
+                    onOptionSelected={setSortByTime}
                   />
                 ) : (
                   <MintsPeriodDropdown
@@ -218,28 +210,19 @@ const Home: NextPage<Props> = ({ ssr }) => {
               </Flex>
             )}
           </Flex>
-          {/* Here the second headers can be modified */}
           <TabsList css={{ mb: 24, mt: 0, borderBottom: 'none' }}>
             <TabsTrigger value="collections">Overview</TabsTrigger>
             <TabsTrigger value="mints">My Assets</TabsTrigger>
           </TabsList>
+
           {isSmallDevice && (
-            <Flex
-              justify="between"
-              align="center"
-              css={{
-                gap: 24,
-                mb: '$4',
-              }}
-            >
+            <Flex justify="between" align="center" css={{ gap: 24, mb: '$4' }}>
               <Flex align="center" css={{ gap: '$4' }}>
                 {tab === 'collections' ? (
                   <CollectionsTimeDropdown
                     compact={isSmallDevice && isMounted}
                     option={sortByTime}
-                    onOptionSelected={(option) => {
-                      setSortByTime(option)
-                    }}
+                    onOptionSelected={setSortByTime}
                   />
                 ) : (
                   <MintsPeriodDropdown
@@ -251,12 +234,9 @@ const Home: NextPage<Props> = ({ ssr }) => {
               </Flex>
             </Flex>
           )}
+
           <TabsContent value="collections">
-            <Box
-              css={{
-                height: '100%',
-              }}
-            >
+            <Box css={{ height: '100%' }}>
               <Flex direction="column">
                 {isSSR || !isMounted ? null : (
                   <CollectionRankingsTable
@@ -269,16 +249,13 @@ const Home: NextPage<Props> = ({ ssr }) => {
                   css={{
                     display: isTrendingCollectionsValidating ? 'none' : 'block',
                   }}
-                ></Box>
+                />
               </Flex>
             </Box>
           </TabsContent>
+
           <TabsContent value="mints">
-            <Box
-              css={{
-                height: '100%',
-              }}
-            >
+            <Box css={{ height: '100%' }}>
               <Flex direction="column">
                 {isSSR || !isMounted ? null : (
                   <MintRankingsTable
@@ -290,11 +267,12 @@ const Home: NextPage<Props> = ({ ssr }) => {
                   css={{
                     display: isTrendingCollectionsValidating ? 'none' : 'block',
                   }}
-                ></Box>
+                />
               </Flex>
             </Box>
           </TabsContent>
         </Tabs.Root>
+
         <Box css={{ my: '$5' }}>
           <Link href={`/${marketplaceChain.routePrefix}/${tab}/trending`}>
             <Button>See More</Button>
@@ -320,7 +298,6 @@ export const getServerSideProps: GetServerSideProps<{
   }
 }> = async ({ params, res }) => {
   const chainPrefix = params?.chain || ''
-  // defines which endpoint to use for each specific chain
   const { reservoirBaseUrl } =
     supportedChains.find((chain) => chain.routePrefix === chainPrefix) ||
     DefaultChain
@@ -331,23 +308,7 @@ export const getServerSideProps: GetServerSideProps<{
     },
   }
 
-  /*
-  // How many items will be displayed is controlled here
-  let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
-    {
-      period: '24h',
-      limit: 5,
-      sortBy: 'volume',
-    }
-
-  const trendingCollectionsPromise = fetcher(
-    `${reservoirBaseUrl}/collections/trending/v1`,
-    trendingCollectionsQuery,
-    headers
-  )
-  */
-
-  // How many items will be displayed is controlled here
+  // Example queries
   let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
     {
       period: '30d',
@@ -387,56 +348,49 @@ export const getServerSideProps: GetServerSideProps<{
     headers
   )
 
+  // Remove .catch() because Promise.allSettled won't throw;
+  // it always returns an array of settled results.
   const promises = await Promise.allSettled([
     trendingCollectionsPromise,
     featuredCollectionsPromise,
     trendingMintsPromise,
-  ]).catch((e) => {
-    console.error(e)
-  })
+  ])
 
-  console.log('Trending Collections:', promises[0].status === 'fulfilled' ? promises[0].value.data : 'Failed to fetch');
+  console.log(
+    'Trending Collections:',
+    promises[0].status === 'fulfilled' ? promises[0].value.data : 'Failed to fetch'
+  )
   // console.log('Featured Collections:', promises[1].status === 'fulfilled' ? promises[1].value.data : 'Failed to fetch');
   // console.log('Trending Mints:', promises[2].status === 'fulfilled' ? promises[2].value.data : 'Failed to fetch');
 
-  const trendingCollections: Props['ssr']['trendingCollections'] =
-    promises?.[0].status === 'fulfilled' && promises[0].value.data
-      ? (promises[0].value.data as Props['ssr']['trendingCollections'])
-      : {}
-  const featuredCollections: Props['ssr']['featuredCollections'] =
-    promises?.[1].status === 'fulfilled' && promises[1].value.data
-      ? (promises[1].value.data as Props['ssr']['featuredCollections'])
+  const trendingCollections: TrendingCollectionsSchema =
+    promises[0].status === 'fulfilled' && promises[0].value.data
+      ? (promises[0].value.data as TrendingCollectionsSchema)
       : {}
 
-  const trendingMints: Props['ssr']['trendingMints'] =
-    promises?.[1].status === 'fulfilled' && promises[1].value.data
-      ? (promises[1].value.data as Props['ssr']['trendingMints'])
+  const featuredCollections: TrendingCollectionsSchema =
+    promises[1].status === 'fulfilled' && promises[1].value.data
+      ? (promises[1].value.data as TrendingCollectionsSchema)
       : {}
 
-  // 1) Get an ethers provider (Infura, Alchemy, etc.)
-  //    Adjust process.env.* to your environment variable
+  const trendingMints: TrendingMintsSchema =
+    promises[2].status === 'fulfilled' && promises[2].value.data
+      ? (promises[2].value.data as TrendingMintsSchema)
+      : {}
+
+  // Example: Filter out non-ERC1155 from trendingCollections
   const provider = new JsonRpcProvider(process.env.INFURA_API_URL)
-
-  // 2) Check each trending collection address on-chain
   if (trendingCollections.collections) {
     const checks = await Promise.all(
       trendingCollections.collections.map(async (collection) => {
         const standard = await checkTokenStandard(collection.id, provider)
-        // Attach this info so we can filter
         return { ...collection, standard }
       })
     )
-
-    // 3) Filter out the ones that are NOT ERC-1155
     trendingCollections.collections = checks.filter(
       (c) => c.standard === 'erc1155'
     )
   }
-
-  // (Optionally repeat for featuredCollections, trendingMints, etc.
-  //  if those also contain "collections" you’d like to filter.)
-
-  // ──────────────────────────────────────────────────────
 
   res.setHeader(
     'Cache-Control',
@@ -444,7 +398,9 @@ export const getServerSideProps: GetServerSideProps<{
   )
 
   return {
-    props: { ssr: { trendingCollections, trendingMints, featuredCollections } },
+    props: {
+      ssr: { trendingCollections, trendingMints, featuredCollections },
+    },
   }
 }
 

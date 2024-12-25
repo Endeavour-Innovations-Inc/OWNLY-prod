@@ -26,19 +26,19 @@ jobs:
 #          git merge --no-ff main -m "Auto-merge main into testnet"
 #          git push
 
-      - name: Sync default with main
-        run: |
-          git checkout default
-          git pull
-          git merge --no-ff main -m "Auto-merge main into default"
-          git push
-
-      - name: Sync privy with main
-        run: |
-          git checkout privy
-          git pull
-          git merge --no-ff main -m "Auto-merge main into privy"
-          git push
+#      - name: Sync default with main
+#        run: |
+#          git checkout default
+#          git pull
+#          git merge --no-ff main -m "Auto-merge main into default"
+#          git push
+#
+#      - name: Sync privy with main
+#        run: |
+#          git checkout privy
+#          git pull
+#          git merge --no-ff main -m "Auto-merge main into privy"
+#          git push
 
       # Removed/Commented Slack notification step:
       #

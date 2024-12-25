@@ -348,8 +348,6 @@ export const getServerSideProps: GetServerSideProps<{
     headers
   )
 
-  // Remove .catch() because Promise.allSettled won't throw;
-  // it always returns an array of settled results.
   const promises = await Promise.allSettled([
     trendingCollectionsPromise,
     featuredCollectionsPromise,
@@ -383,7 +381,8 @@ export const getServerSideProps: GetServerSideProps<{
   if (trendingCollections.collections) {
     const checks = await Promise.all(
       trendingCollections.collections.map(async (collection) => {
-        const standard = await checkTokenStandard(collection.id, provider)
+        // Non-null assertion (!) ensures string
+        const standard = await checkTokenStandard(collection.id!, provider)
         return { ...collection, standard }
       })
     )

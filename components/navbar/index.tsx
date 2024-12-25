@@ -133,7 +133,7 @@ const Navbar = () => {
               <NavItem>Explore</NavItem>
             </Link>
 
-            <Link href={`/${routePrefix}`}>
+            <Link href={`/${routePrefix}/createcollection/trending`}>
               <NavItem>Mint</NavItem>
             </Link>
 

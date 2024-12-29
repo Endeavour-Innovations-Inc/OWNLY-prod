@@ -137,6 +137,10 @@ const Navbar = () => {
               <NavItem>Mint</NavItem>
             </Link>
 
+            <Link href={`/${routePrefix}/proposals`}>
+              <NavItem>Proposals</NavItem>
+            </Link>
+
             <HoverCard.Root openDelay={200}>
               <HoverCard.Trigger>
                 <NavItem>Trending</NavItem>

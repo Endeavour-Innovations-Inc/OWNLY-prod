@@ -94,9 +94,9 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
   const [playingElement, setPlayingElement] = useState<
     HTMLAudioElement | HTMLVideoElement | null
   >()
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-  const loadMoreObserver = useIntersectionObserver(loadMoreRef, {})
-  const [path, _] = router.asPath.split('?')
+  // const loadMoreRef = useRef<HTMLDivElement>(null)
+  // const loadMoreObserver = useIntersectionObserver(loadMoreRef, {})
+  // const [path, _] = router.asPath.split('?')
   // const routerPath = path.split('/')
   // const isSweepRoute = routerPath[routerPath.length - 1] === 'sweep'
   // const isMintRoute = routerPath[routerPath.length - 1] === 'mint'
@@ -143,7 +143,7 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
       : undefined
 
   let tokenQuery: Parameters<typeof useDynamicTokens>['0'] = {
-    limit: 20,
+    limit: 5,
     collection: id,
     sortBy: 'floorAskPrice',
     sortDirection: 'asc',
@@ -335,13 +335,6 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
   const contractKind = `${collection?.contractKind?.toUpperCase()}${
     hasSecurityConfig ? 'C' : ''
   }`
-
-  useEffect(() => {
-    const isVisible = !!loadMoreObserver?.isIntersecting
-    if (isVisible) {
-      fetchNextPage()
-    }
-  }, [loadMoreObserver?.isIntersecting])
 
   useEffect(() => {
     if (isMounted && initialTokenFallbackData) {
@@ -540,50 +533,38 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
               </Flex>
               <Flex align="center">
                 <Flex css={{ alignItems: 'center', gap: '$3' }}>
-                  {collection?.floorAsk?.price?.amount?.raw && sweepSymbol ? (
+                {collection?.floorAsk?.price?.amount?.raw && sweepSymbol ? (
                     <Sweep
-                      collectionId={collection.id}
-                      openState={sweepOpenState}
-                      buttonChildren={
+                        collectionId={collection.id}
+                        openState={sweepOpenState}
+                        buttonChildren={
                         <Flex
-                          css={{ gap: '$2' }}
-                          align="center"
-                          justify="center"
+                            css={{ gap: '$2' }}
+                            align="center"
+                            justify="center"
                         >
-                          <Text style="h6" as="h6" css={{ color: '$bg' }}>
+                            {/* “Collect” text */}
+                            <Text style="h6" as="h6" css={{ color: '$bg' }}>
                             Collect
-                          </Text>
-                          <Text
-                            style="h6"
-                            as="h6"
-                            css={{ color: '$bg', fontWeight: 900 }}
-                          >
-                            <Flex
-                              css={{
-                                gap: '$1',
-                              }}
-                            >
-                              <FormatCrypto
-                                amount={
-                                  collection?.floorAsk?.price?.amount?.raw
-                                }
-                                decimals={
-                                  collection?.floorAsk?.price?.currency
-                                    ?.decimals
-                                }
+                            </Text>
+
+                            {/* Price & Symbol next to each other */}
+                            <Flex css={{ gap: '$1' }} align="center">
+                            <FormatCrypto
+                                amount={collection?.floorAsk?.price?.amount?.raw}
+                                decimals={collection?.floorAsk?.price?.currency?.decimals}
                                 textStyle="h6"
                                 css={{ color: '$bg', fontWeight: 900 }}
                                 maximumFractionDigits={4}
-                              />
-                              {sweepSymbol}
+                            />
+                            {sweepSymbol}
                             </Flex>
-                          </Text>
                         </Flex>
-                      }
-                      buttonCss={{ '@lg': { order: 2 } }}
-                      mutate={mutate}
+                        }
+                        buttonCss={{ '@lg': { order: 2 } }}
+                        mutate={mutate}
                     />
-                  ) : null}
+                    ) : null}
                   {/* Collection Mint */}
                   {mintData && mintPrice ? (
                     <Mint
@@ -853,25 +834,6 @@ const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
                             }
                           />
                         ))}
-                    <Box
-                      ref={loadMoreRef}
-                      css={{
-                        display: isFetchingPage ? 'none' : 'block',
-                      }}
-                    >
-                      {(hasNextPage || isFetchingPage) &&
-                        !isFetchingInitialData && <LoadingCard />}
-                    </Box>
-                    {(hasNextPage || isFetchingPage) &&
-                      !isFetchingInitialData && (
-                        <>
-                          {Array(6)
-                            .fill(null)
-                            .map((_, index) => (
-                              <LoadingCard key={`loading-card-${index}`} />
-                            ))}
-                        </>
-                      )}
                   </Grid>
                   {tokens.length == 0 && !isFetchingPage && (
                     <Flex
@@ -980,7 +942,7 @@ export const getServerSideProps: GetServerSideProps<{
     collection: id,
     sortBy: 'floorAskPrice',
     sortDirection: 'asc',
-    limit: 20,
+    limit: 5,
     normalizeRoyalties: NORMALIZE_ROYALTIES,
     includeDynamicPricing: true,
     includeAttributes: true,

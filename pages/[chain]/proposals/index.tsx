@@ -1,923 +1,306 @@
-import { GetServerSideProps, InferGetServerSidePropsType, NextPage } from 'next'
-import {
-  Text,
-  Flex,
-  Box,
-  Input,
-  FormatCrypto,
-  FormatCryptoCurrency,
-} from '../../../components/primitives'
-import {
-  useCollections,
-  useCollectionActivity,
-  useDynamicTokens,
-  useAttributes,
-  useReservoirClient,
-} from '@reservoir0x/reservoir-kit-ui'
 import { paths } from '@reservoir0x/reservoir-sdk'
-import Layout from 'components/Layout'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { truncateAddress } from 'utils/truncate'
-import TokenCard from 'components/collections/TokenCard'
-import { AttributeFilters } from 'components/collections/filters/AttributeFilters'
-import { FilterButton } from 'components/common/FilterButton'
-import SelectedAttributes from 'components/collections/filters/SelectedAttributes'
-import { CollectionOffer } from 'components/buttons'
-import { Grid } from 'components/primitives/Grid'
-import { useIntersectionObserver } from 'usehooks-ts'
-import fetcher from 'utils/fetcher'
-import { useRouter } from 'next/router'
-import { SortTokens } from 'components/collections/SortTokens'
-import { useMediaQuery } from 'react-responsive'
-import { TabsList, TabsTrigger, TabsContent } from 'components/primitives/Tab'
-import * as Tabs from '@radix-ui/react-tabs'
-import { useDebounce } from 'usehooks-ts'
-import { NAVBAR_HEIGHT } from 'components/navbar'
-import { CollectionActivityTable } from 'components/collections/CollectionActivityTable'
-import { ActivityFilters } from 'components/common/ActivityFilters'
-import { MobileAttributeFilters } from 'components/collections/filters/MobileAttributeFilters'
-import { MobileActivityFilters } from 'components/common/MobileActivityFilters'
-import LoadingCard from 'components/common/LoadingCard'
-import { useChainCurrency, useMounted } from 'hooks'
-import { NORMALIZE_ROYALTIES } from 'pages/_app'
-import {
-  faCog,
-  faCube,
-  faGlobe,
-  faHand,
-  faMagnifyingGlass,
-  faSeedling,
-} from '@fortawesome/free-solid-svg-icons'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import supportedChains, { DefaultChain } from 'utils/chains'
 import { Head } from 'components/Head'
-import { OpenSeaVerified } from 'components/common/OpenSeaVerified'
-import { useAccount } from 'wagmi'
-import Img from 'components/primitives/Img'
-import Sweep from 'components/buttons/Sweep'
-import Mint from 'components/buttons/Mint'
-import optimizeImage from 'utils/optimizeImage'
-import CopyText from 'components/common/CopyText'
-import { CollectionDetails } from 'components/collections/CollectionDetails'
-import useTokenUpdateStream from 'hooks/useTokenUpdateStream'
-import LiveState from 'components/common/LiveState'
-import { Address } from 'viem'
+import Layout from 'components/Layout'
+import { Footer } from 'components/home/Footer'
+import { Box, Button, Flex, Text } from 'components/primitives'
+import { ChainContext } from 'context/ChainContextProvider'
+import { useMarketplaceChain, useMounted } from 'hooks'
+import { GetServerSideProps, InferGetServerSidePropsType, NextPage } from 'next'
+import Link from 'next/link'
+import {
+  ComponentPropsWithoutRef,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
+import supportedChains, { DefaultChain } from 'utils/chains'
+import * as Tabs from '@radix-ui/react-tabs'
+import {
+  useTrendingCollections,
+  useTrendingMints,
+} from '@reservoir0x/reservoir-kit-ui'
+import ChainToggle from 'components/common/ChainToggle'
+import CollectionsTimeDropdown, {
+  CollectionsSortingOption,
+} from 'components/common/CollectionsTimeDropdown'
+import MintsPeriodDropdown, {
+  MintsSortingOption,
+} from 'components/common/MintsPeriodDropdown'
+import { FeaturedCards } from 'components/home/FeaturedCards'
+import { TabsContent, TabsList, TabsTrigger } from 'components/primitives/Tab'
+import { CollectionRankingsTable } from 'components/rankings/CollectionRankingsTable'
+import { MintRankingsTable } from 'components/rankings/MintRankingsTable'
+import { useTheme } from 'next-themes'
+import { useRouter } from 'next/router'
+import { useMediaQuery } from 'react-responsive'
+import fetcher from 'utils/fetcher'
 
-type ActivityTypes = Exclude<
-  NonNullable<
-    NonNullable<
-      Exclude<Parameters<typeof useCollectionActivity>['0'], boolean>
-    >['types']
-  >,
-  string
->
+// ──────────────────────────────────────────────────────
+//  ERC165 Helpers
+// ──────────────────────────────────────────────────────
+import { Contract, JsonRpcProvider } from 'ethers'
+const ERC165_ABI = [
+  'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
+]
+const ERC721_INTERFACE_ID = '0x80ac58cd'
+const ERC1155_INTERFACE_ID = '0xd9b67a26'
+
+async function checkTokenStandard(
+  contractAddress: string,
+  provider: JsonRpcProvider
+): Promise<'erc721' | 'erc1155' | 'unknown'> {
+  try {
+    const contract = new Contract(contractAddress, ERC165_ABI, provider)
+
+    const is721 = await contract
+      .supportsInterface(ERC721_INTERFACE_ID)
+      .catch(() => false)
+    const is1155 = await contract
+      .supportsInterface(ERC1155_INTERFACE_ID)
+      .catch(() => false)
+
+    if (is1155) return 'erc1155'
+    if (is721) return 'erc721'
+    return 'unknown'
+  } catch (err) {
+    console.error(`Failed to check interface for ${contractAddress}`, err)
+    return 'unknown'
+  }
+}
+// ──────────────────────────────────────────────────────
+
+type TabValue = 'collections' | 'mints'
 
 type Props = InferGetServerSidePropsType<typeof getServerSideProps>
 
-const CollectionPage: NextPage<Props> = ({ id, ssr }) => {
+const Home: NextPage<Props> = ({ ssr }) => {
   const router = useRouter()
-  const { address } = useAccount()
-  const [attributeFiltersOpen, setAttributeFiltersOpen] = useState(false)
-  const [activityFiltersOpen, setActivityFiltersOpen] = useState(true)
-  const [tokenSearchQuery, setTokenSearchQuery] = useState<string>('')
-  const chainCurrency = useChainCurrency()
-  const client = useReservoirClient()
-  const debouncedSearch = useDebounce(tokenSearchQuery, 500)
-  const [socketState, setSocketState] = useState<SocketState>(null)
-  const [activityTypes, setActivityTypes] = useState<ActivityTypes>([
-    'sale',
-    'mint',
-  ])
-  const [initialTokenFallbackData, setInitialTokenFallbackData] = useState(true)
+  const marketplaceChain = useMarketplaceChain()
   const isMounted = useMounted()
-  const isSmallDevice = useMediaQuery({ maxWidth: 905 }) && isMounted
-  const [playingElement, setPlayingElement] = useState<
-    HTMLAudioElement | HTMLVideoElement | null
-  >()
-  // const loadMoreRef = useRef<HTMLDivElement>(null)
-  // const loadMoreObserver = useIntersectionObserver(loadMoreRef, {})
-  // const [path, _] = router.asPath.split('?')
-  // const routerPath = path.split('/')
-  // const isSweepRoute = routerPath[routerPath.length - 1] === 'sweep'
-  // const isMintRoute = routerPath[routerPath.length - 1] === 'mint'
-  const sweepOpenState = useState(true)
-  const mintOpenState = useState(true)
 
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const collectionChain = DefaultChain
-
-  const scrollToTop = () => {
-    let top = (scrollRef.current?.offsetTop || 0) - (NAVBAR_HEIGHT + 16)
-    window.scrollTo({ top: top })
-  }
-
-  let chainName = collectionChain?.name
-
-  let collectionQuery: Parameters<typeof useCollections>['0'] = {
-    id,
-    includeSalesCount: true,
-    includeMintStages: true,
-    includeSecurityConfigs: true,
-  }
-
-  const { data: collections } = useCollections(collectionQuery, {
-    fallbackData: [ssr.collection],
-  })
-
-  let collection = collections && collections[0]
-
-  const mintData = collection?.mintStages?.find(
-    (stage) => stage.kind === 'public',
-  )
-
-  const mintPriceDecimal = mintData?.price?.amount?.decimal
-  const mintCurrency = mintData?.price?.currency?.symbol?.toUpperCase()
-
-  const mintPrice =
-    typeof mintPriceDecimal === 'number' &&
-    mintPriceDecimal !== null &&
-    mintPriceDecimal !== undefined
-      ? mintPriceDecimal === 0
-        ? 'Free'
-        : `${mintPriceDecimal} ${mintCurrency}`
-      : undefined
-
-  let tokenQuery: Parameters<typeof useDynamicTokens>['0'] = {
-    limit: 5,
-    collection: id,
-    sortBy: 'floorAskPrice',
-    sortDirection: 'asc',
-    includeQuantity: true,
-    includeLastSale: true,
-    ...(debouncedSearch.length > 0 && {
-      tokenName: debouncedSearch,
-    }),
-  }
-
-  const sortDirection = router.query['sortDirection']?.toString()
-  const sortBy = router.query['sortBy']?.toString()
-
-  if (sortBy === 'tokenId' || sortBy === 'rarity') tokenQuery.sortBy = sortBy
-  if (sortDirection === 'desc') tokenQuery.sortDirection = 'desc'
-
-  // Extract all queries of attribute type
-  Object.keys({ ...router.query }).map((key) => {
-    if (
-      key.startsWith('attributes[') &&
-      key.endsWith(']') &&
-      router.query[key] !== ''
-    ) {
-      //@ts-ignore
-      tokenQuery[key] = router.query[key]
+  const { theme: nextTheme } = useTheme()
+  const [theme, setTheme] = useState<string | null>(null)
+  useEffect(() => {
+    if (nextTheme) {
+      setTheme(nextTheme)
     }
-  })
+  }, [nextTheme])
 
-  const {
-    data: tokens,
-    mutate,
-    fetchNextPage,
-    setSize,
-    resetCache,
-    isFetchingInitialData,
-    isFetchingPage,
-    hasNextPage,
-  } = useDynamicTokens(tokenQuery, {
-    fallbackData: initialTokenFallbackData ? [ssr.tokens] : undefined,
-  })
+  const isSSR = typeof window === 'undefined'
+  const isSmallDevice = useMediaQuery({ query: '(max-width: 800px)' })
 
-  useTokenUpdateStream(id as string, collectionChain.id, {
-    onClose: () => setSocketState(0),
-    onOpen: () => setSocketState(1),
-    onMessage: ({
-      data: reservoirEvent,
-    }: MessageEvent<ReservoirWebsocketIncomingEvent>) => {
-      if (Object.keys(router.query).some((key) => key.includes('attribute')))
-        return
+  const [tab, setTab] = useState<TabValue>('collections')
+  const [sortByTime, setSortByTime] = useState<CollectionsSortingOption>('24h')
+  const [sortByPeriod, setSortByPeriod] = useState<MintsSortingOption>('24h')
 
-      const tokenName = reservoirEvent.data.token.name || ''
-      if (
-        tokenSearchQuery &&
-        tokenSearchQuery.length > 0 &&
-        !tokenName.includes(tokenSearchQuery)
-      ) {
-        return
-      }
-
-      let hasChange = false
-
-      const newTokens = [...tokens]
-      const price = NORMALIZE_ROYALTIES
-        ? reservoirEvent.data?.market?.floorAskNormalized?.price?.amount?.native
-        : reservoirEvent.data?.market?.floorAsk?.price?.amount?.native
-      const tokenIndex = tokens.findIndex(
-        (token) => token.token?.tokenId === reservoirEvent?.data.token.tokenId,
-      )
-      const token = tokenIndex > -1 ? tokens[tokenIndex] : null
-      if (token) {
-        if (token?.market?.floorAsk?.dynamicPricing) {
-          return
-        }
-        newTokens.splice(tokenIndex, 1)
-      }
-
-      if (!price) {
-        if (token) {
-          const endOfListingsIndex = tokens.findIndex(
-            (token) => !token.market?.floorAsk?.price?.amount?.native,
-          )
-          if (endOfListingsIndex === -1) {
-            hasChange = true
-          } else {
-            const newTokenIndex =
-              sortBy === 'rarity'
-                ? tokenIndex
-                : endOfListingsIndex > -1
-                  ? endOfListingsIndex
-                  : 0
-            newTokens.splice(newTokenIndex, 0, {
-              ...token,
-              market: {
-                floorAsk: {
-                  id: undefined,
-                  price: undefined,
-                  maker: undefined,
-                  validFrom: undefined,
-                  validUntil: undefined,
-                  source: {},
-                },
-              },
-            })
-            hasChange = true
-          }
-        }
-      } else {
-        let updatedToken = token ? token : reservoirEvent.data
-        updatedToken = {
-          ...updatedToken,
-          market: {
-            floorAsk: NORMALIZE_ROYALTIES
-              ? reservoirEvent.data.market.floorAskNormalized
-              : reservoirEvent.data.market.floorAsk,
-          },
-        }
-        if (tokens) {
-          let updatedTokenPosition =
-            sortBy === 'rarity'
-              ? tokenIndex
-              : tokens.findIndex((token) => {
-                  let currentTokenPrice =
-                    token.market?.floorAsk?.price?.amount?.native
-                  if (currentTokenPrice !== undefined) {
-                    return sortDirection === 'desc'
-                      ? updatedToken.market.floorAsk.price.amount.native >=
-                          currentTokenPrice
-                      : updatedToken.market.floorAsk.price.amount.native <=
-                          currentTokenPrice
-                  }
-                  return true
-                })
-          if (updatedTokenPosition <= -1) {
-            return
-          }
-
-          newTokens.splice(updatedTokenPosition, 0, updatedToken)
-          hasChange = true
-        }
-      }
-      if (hasChange) {
-        mutate(
-          [
-            {
-              tokens: newTokens,
-            },
-          ],
-          {
-            revalidate: false,
-            optimisticData: [
-              {
-                tokens: newTokens,
-              },
-            ],
-          },
-        )
-      }
-    },
-  })
-
-  const attributesData = useAttributes(id)
-
-  const attributes = useMemo(() => {
-    if (!attributesData.data) {
-      return []
-    }
-    return attributesData.data
-      ?.filter(
-        (attribute) => attribute.kind != 'number' && attribute.kind != 'range',
-      )
-      .sort((a, b) => a.key.localeCompare(b.key))
-  }, [attributesData.data])
-
-  if (attributeFiltersOpen && attributesData.response && !attributes.length) {
-    setAttributeFiltersOpen(false)
-  }
-
-  const rarityEnabledCollection = Boolean(
-    collection?.tokenCount &&
-      +collection.tokenCount >= 2 &&
-      attributes &&
-      attributes?.length >= 2,
-  )
-
-  const hasSecurityConfig =
-    typeof collection?.securityConfig?.transferSecurityLevel === 'number'
-
-  // contract kind is being assigned here, see how the parsing is being done
-  const contractKind = `${collection?.contractKind?.toUpperCase()}${
-    hasSecurityConfig ? 'C' : ''
-  }`
+  const { chain, switchCurrentChain } = useContext(ChainContext)
 
   useEffect(() => {
-    if (isMounted && initialTokenFallbackData) {
-      setInitialTokenFallbackData(false)
+    if (router.query.chain) {
+      let chainIndex: number | undefined
+      for (let i = 0; i < supportedChains.length; i++) {
+        if (supportedChains[i].routePrefix == router.query.chain) {
+          chainIndex = supportedChains[i].id
+        }
+      }
+      if (chainIndex !== -1 && chainIndex) {
+        switchCurrentChain(chainIndex)
+      }
     }
-  }, [router.query])
+  }, [router.query, switchCurrentChain])
 
-  let sweepSymbol = collection?.floorAsk?.price?.currency?.symbol
-  let topBidPrice = collection?.topBid?.price?.amount?.native
+  const {
+    data: trendingCollections,
+    isValidating: isTrendingCollectionsValidating,
+  } = useTrendingCollections(
+    {
+      limit: 20,
+      sortBy: 'volume',
+      period: sortByTime,
+    },
+    chain.id,
+    {
+      fallbackData: ssr.trendingCollections,
+      keepPreviousData: true,
+    }
+  )
+
+  const {
+    data: featuredCollections,
+    isValidating: isFeaturedCollectionsValidating,
+  } = useTrendingCollections(
+    {
+      limit: 20,
+      sortBy: 'sales',
+      period: '24h',
+    },
+    chain.id,
+    {
+      fallbackData: ssr.featuredCollections,
+      keepPreviousData: true,
+    }
+  )
+
+  let mintsQuery: Parameters<typeof useTrendingMints>['0'] = {
+    limit: 20,
+    period: sortByPeriod,
+    type: 'any',
+  }
+
+  const { data: trendingMints, isValidating: isTrendingMintsValidating } =
+    useTrendingMints(mintsQuery, chain.id, {
+      fallbackData: ssr.trendingMints,
+      keepPreviousData: true,
+    })
+
+  let volumeKey: ComponentPropsWithoutRef<
+    typeof CollectionRankingsTable
+  >['volumeKey'] = '1day'
+
+  switch (sortByTime) {
+    case '30d':
+      volumeKey = '30day'
+      break
+    case '7d':
+      volumeKey = '7day'
+      break
+    case '24h':
+      volumeKey = '1day'
+      break
+  }
 
   return (
     <Layout>
-      <Head
-        ogImage={ssr?.collection?.collections?.[0]?.banner}
-        title={ssr?.collection?.collections?.[0]?.name}
-        description={ssr?.collection?.collections?.[0]?.description as string}
-        metatags={
-          <>
-            <meta property="fc:frame" content="vNext" />
-            <meta
-              property="fc:frame:image"
-              content={collection?.image || collection?.banner}
-            />
-            <meta property="fc:frame:image:aspect_ratio" content="1:1" />
-            <meta property="fc:frame:button:1" content="Mint" />
-            <meta property="fc:frame:button:1:action" content="mint" />
-            <meta
-              property="fc:frame:button:1:target"
-              content={`eip155:${collection?.chainId}:${collection?.primaryContract}`}
-            />
-
-            {collection?.floorAsk?.price?.amount?.native && (
-              <>
-                <meta
-                  property="fc:frame:button:2"
-                  content={`Collect ${
-                    collection.floorAsk.price.amount.native
-                  } ${collection.floorAsk.price.currency?.symbol?.toUpperCase()}`}
-                />
-                <meta property="fc:frame:button:2:action" content="link" />
-                <meta
-                  property="fc:frame:button:2:target"
-                  content={`${process.env.NEXT_PUBLIC_HOST_URL}${router.asPath}`}
-                />
-              </>
-            )}
-          </>
-        }
-      />
-      <Tabs.Root
-        defaultValue="items"
-        onValueChange={(value) => {
-          if (value === 'items') {
-            resetCache()
-            setSize(1)
-            mutate()
-          }
+      <Head />
+      <Box
+        css={{
+          p: 24,
+          height: '100%',
+          '@bp800': {
+            px: '$5',
+          },
+          '@xl': {
+            px: '$6',
+          },
         }}
       >
-        {collection ? (
-          <Flex
-            direction="column"
-            css={{
-              px: '$4',
-              pt: '$4',
-              pb: 0,
-              '@md': {
-                px: '$5',
-              },
-
-              '@xl': {
-                px: '$6',
-              },
-            }}
-          >
-            <Flex
-              justify="between"
-              wrap="wrap"
-              css={{ mb: '$4', gap: '$4' }}
-              align="start"
-            >
-              <Flex
-                direction="column"
-                css={{
-                  gap: '$4',
-                  minWidth: 0,
-                  //flex: 1,
-                  width: '100%',
-                  '@lg': { width: 'unset' },
-                }}
-              >
-                <Flex css={{ gap: '$4', flex: 1 }} align="center">
-                  <Img
-                    src={optimizeImage(collection.image!, 72 * 2)}
-                    width={72}
-                    height={72}
-                    css={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 8,
-                      objectFit: 'cover',
-                      border: '1px solid $gray5',
-                    }}
-                    alt="Collection Page Image"
+        <Tabs.Root
+          onValueChange={(value) => setTab(value as TabValue)}
+          defaultValue="collections"
+        >
+          <Flex justify="between" align="start" css={{ mb: '$3' }}>
+            <Text style="h4" as="h4">
+              Trending
+            </Text>
+            {!isSmallDevice && (
+              <Flex align="center" css={{ gap: '$4' }}>
+                {tab === 'collections' ? (
+                  <CollectionsTimeDropdown
+                    compact={isSmallDevice && isMounted}
+                    option={sortByTime}
+                    onOptionSelected={setSortByTime}
                   />
-                  <Box css={{ minWidth: 0 }}>
-                    <Flex align="center" css={{ gap: '$1', mb: 0 }}>
-                      <Text style="h4" as="h6" ellipsify>
-                        {collection.name}
-                      </Text>
-                      <OpenSeaVerified
-                        openseaVerificationStatus={
-                          collection?.openseaVerificationStatus
-                        }
-                      />
-                    </Flex>
-                    <Flex
-                      css={{
-                        gap: '$3',
-                        ...(isSmallDevice && {
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr',
-                        }),
-                      }}
-                      align="center"
-                    >
-                      <CopyText
-                        text={collection.id as string}
-                        css={{
-                          width: 'max-content',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '$1',
-                        }}
-                      >
-                        <Box css={{ color: '$gray9' }}>
-                          <FontAwesomeIcon icon={faCube} size="xs" />
-                        </Box>
-                        <Text as="p" style="body3">
-                          {truncateAddress(collection?.primaryContract || '')}
-                        </Text>
-                      </CopyText>
-                      <Flex
-                        align="center"
-                        css={{
-                          gap: '$1',
-                        }}
-                      >
-                        <Flex
-                          css={{
-                            color: '$gray9',
-                          }}
-                        >
-                          <FontAwesomeIcon size="xs" icon={faCog} />
-                        </Flex>
-                        {/* Element here responsible for displaying which type of contract it is */}
-                        <Text style="body3">{contractKind}</Text>
-                      </Flex>
-
-                      <Flex
-                        align="center"
-                        css={{
-                          gap: '$1',
-                        }}
-                      >
-                        <Flex
-                          css={{
-                            color: '$gray9',
-                          }}
-                        >
-                          <FontAwesomeIcon size="xs" icon={faGlobe} />
-                        </Flex>
-                        <Text style="body3">{chainName}</Text>
-                      </Flex>
-
-                      {mintData && (
-                        <Flex
-                          align="center"
-                          css={{
-                            gap: '$1',
-                          }}
-                        >
-                          <Flex
-                            css={{
-                              color: '$green9',
-                            }}
-                          >
-                            <FontAwesomeIcon size="xs" icon={faSeedling} />
-                          </Flex>
-                          <Text style="body3">Minting Now</Text>
-                        </Flex>
-                      )}
-                    </Flex>
-                  </Box>
-                </Flex>
+                ) : (
+                  <MintsPeriodDropdown
+                    option={sortByPeriod}
+                    onOptionSelected={setSortByPeriod}
+                  />
+                )}
+                <ChainToggle />
               </Flex>
-              <Flex align="center">
-                <Flex css={{ alignItems: 'center', gap: '$3' }}>
-                {collection?.floorAsk?.price?.amount?.raw && sweepSymbol ? (
-                    <Sweep
-                        collectionId={collection.id}
-                        openState={sweepOpenState}
-                        buttonChildren={
-                        <Flex
-                            css={{ gap: '$2' }}
-                            align="center"
-                            justify="center"
-                        >
-                            {/* “Collect” text */}
-                            <Text style="h6" as="h6" css={{ color: '$bg' }}>
-                            Collect
-                            </Text>
+            )}
+          </Flex>
+          <TabsList css={{ mb: 24, mt: 0, borderBottom: 'none' }}>
+            <TabsTrigger value="collections">Overview</TabsTrigger>
+            <TabsTrigger value="mints">My Assets</TabsTrigger>
+          </TabsList>
 
-                            {/* Price & Symbol next to each other */}
-                            <Flex css={{ gap: '$1' }} align="center">
-                            <FormatCrypto
-                                amount={collection?.floorAsk?.price?.amount?.raw}
-                                decimals={collection?.floorAsk?.price?.currency?.decimals}
-                                textStyle="h6"
-                                css={{ color: '$bg', fontWeight: 900 }}
-                                maximumFractionDigits={4}
-                            />
-                            {sweepSymbol}
-                            </Flex>
-                        </Flex>
-                        }
-                        buttonCss={{ '@lg': { order: 2 } }}
-                        mutate={mutate}
-                    />
-                    ) : null}
-                  {/* Collection Mint */}
-                  {mintData && mintPrice ? (
-                    <Mint
-                      collectionId={collection.id}
-                      openState={mintOpenState}
-                      buttonChildren={
-                        <Flex
-                          css={{ gap: '$2', px: '$2' }}
-                          align="center"
-                          justify="center"
-                        >
-                          {isSmallDevice && (
-                            <FontAwesomeIcon icon={faSeedling} />
-                          )}
-                          {!isSmallDevice && (
-                            <Text style="h6" as="h6" css={{ color: '$bg' }}>
-                              Mint
-                            </Text>
-                          )}
-
-                          {!isSmallDevice && (
-                            <Text
-                              style="h6"
-                              as="h6"
-                              css={{ color: '$bg', fontWeight: 900 }}
-                            >
-                              {`${mintPrice}`}
-                            </Text>
-                          )}
-                        </Flex>
-                      }
-                      buttonCss={{
-                        minWidth: 'max-content',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        flexGrow: 1,
-                        justifyContent: 'center',
-                        px: '$2',
-                        maxWidth: '220px',
-                        '@md': {
-                          order: 1,
-                        },
-                      }}
-                      mutate={mutate}
-                    />
-                  ) : null}
-                  <CollectionOffer
-                    collection={collection}
-                    buttonChildren={<FontAwesomeIcon icon={faHand} />}
-                    buttonProps={{ color: mintData ? 'gray3' : 'primary' }}
-                    buttonCss={{ px: '$4' }}
-                    mutate={mutate}
+          {isSmallDevice && (
+            <Flex justify="between" align="center" css={{ gap: 24, mb: '$4' }}>
+              <Flex align="center" css={{ gap: '$4' }}>
+                {tab === 'collections' ? (
+                  <CollectionsTimeDropdown
+                    compact={isSmallDevice && isMounted}
+                    option={sortByTime}
+                    onOptionSelected={setSortByTime}
                   />
-                </Flex>
+                ) : (
+                  <MintsPeriodDropdown
+                    option={sortByPeriod}
+                    onOptionSelected={setSortByPeriod}
+                  />
+                )}
+                <ChainToggle />
               </Flex>
             </Flex>
+          )}
 
-            <TabsList css={{ mt: 0 }}>
-              <TabsTrigger value="items">Items</TabsTrigger>
-              <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="items">
-              <Flex
-                css={{
-                  gap: attributeFiltersOpen ? '$5' : '',
-                  position: 'relative',
-                }}
-                ref={scrollRef}
-              >
-                {isSmallDevice ? (
-                  <MobileAttributeFilters
-                    attributes={attributes}
-                    scrollToTop={scrollToTop}
-                  />
-                ) : (
-                  <>
-                    <AttributeFilters
-                      attributes={attributes}
-                      open={attributeFiltersOpen}
-                      setOpen={setAttributeFiltersOpen}
-                      scrollToTop={scrollToTop}
-                    />
-                  </>
-                )}
-                <Box
-                  css={{
-                    flex: 1,
-                    width: '100%',
-                  }}
-                >
-                  <Flex css={{ marginBottom: '$4', gap: '$3' }} align="center">
-                    <Flex align="center" css={{ gap: '$3', flex: 1 }}>
-                      {attributes &&
-                        attributes.length > 0 &&
-                        !isSmallDevice && (
-                          <FilterButton
-                            open={attributeFiltersOpen}
-                            setOpen={setAttributeFiltersOpen}
-                          />
-                        )}
-                      {!isSmallDevice && (
-                        <Box
-                          css={{ position: 'relative', flex: 1, maxWidth: 420 }}
-                        >
-                          <Box
-                            css={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '$4',
-                              zIndex: 2,
-                              transform: 'translate(0, -50%)',
-                              color: '$gray11',
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faMagnifyingGlass} />
-                          </Box>
-                          <Input
-                            css={{ pl: 42 }}
-                            placeholder="Search by token name"
-                            onChange={(e) => {
-                              setTokenSearchQuery(e.target.value)
-                            }}
-                            value={tokenSearchQuery}
-                          />
-                        </Box>
-                      )}
-                    </Flex>
-                    {socketState !== null && <LiveState />}
-                    <Flex
-                      justify={'end'}
-                      css={{
-                        width: '100%',
-                        gap: '$2',
-                        '@md': {
-                          width: 'max-content',
-                          gap: '$3',
-                        },
-                      }}
-                    >
-                      <SortTokens
-                        css={{
-                          order: 4,
-                          px: '14px',
-                          justifyContent: 'center',
-                          '@md': {
-                            order: 1,
-                            width: '220px',
-                            height: '48px',
-                            minWidth: 'max-content',
-                            px: '$5',
-                          },
-                        }}
-                      />
-                    </Flex>
-                  </Flex>
-
-                  {!isSmallDevice && (
-                    <SelectedAttributes
-                      collection={collection}
-                      mutate={mutate}
-                    />
-                  )}
-                  <Flex
-                    css={{
-                      gap: '$4',
-                      mb: '$3',
-                      flexWrap: 'wrap',
-                      '@bp800': {
-                        display: 'flex',
-                      },
-                      display: 'flex',
-                    }}
-                  >
-                    <Flex css={{ gap: '$1' }}>
-                      <Text style="body1" as="p" color="subtle">
-                        Floor
-                      </Text>
-                      <Text style="body1" as="p" css={{ fontWeight: '700' }}>
-                        {collection?.floorAsk?.price?.amount?.raw &&
-                        sweepSymbol ? (
-                          <Flex
-                            css={{
-                              gap: '$2',
-                            }}
-                          >
-                            <FormatCryptoCurrency
-                              amount={collection?.floorAsk?.price?.amount?.raw}
-                              decimals={
-                                collection?.floorAsk?.price?.currency?.decimals
-                              }
-                              logoHeight={14}
-                              textStyle="subtitle1"
-                              maximumFractionDigits={4}
-                            />
-                            {sweepSymbol}
-                          </Flex>
-                        ) : (
-                          '-'
-                        )}
-                      </Text>
-                    </Flex>
-                    <Flex css={{ gap: '$1' }}>
-                      <Text style="body1" as="p" color="subtle">
-                        Top Bid
-                      </Text>
-                      <Text style="body1" as="p" css={{ fontWeight: '700' }}>
-                        {topBidPrice
-                          ? `${topBidPrice?.toFixed(2) || 0} ${
-                              chainCurrency.symbol
-                            }`
-                          : '-'}
-                      </Text>
-                    </Flex>
-                    <Flex css={{ gap: '$1' }}>
-                      <Text style="body1" as="p" color="subtle">
-                        Count
-                      </Text>
-                      <Text style="body1" as="p" css={{ fontWeight: '700' }}>
-                        {Number(collection?.tokenCount)?.toLocaleString()}
-                      </Text>
-                    </Flex>
-                  </Flex>
-                  <Grid
-                    css={{
-                      gap: '$4',
-                      pb: '$6',
-                      gridTemplateColumns:
-                        'repeat(auto-fill, minmax(200px, 1fr))',
-                      '@md': {
-                        gridTemplateColumns:
-                          'repeat(auto-fill, minmax(240px, 1fr))',
-                      },
-                    }}
-                  >
-                    {isFetchingInitialData
-                      ? Array(10)
-                          .fill(null)
-                          .map((_, index) => (
-                            <LoadingCard key={`loading-card-${index}`} />
-                          ))
-                      : tokens.map((token, i) => (
-                          <TokenCard
-                            key={i}
-                            token={token}
-                            address={address as Address}
-                            mutate={mutate}
-                            rarityEnabled={rarityEnabledCollection}
-                            onMediaPlayed={(e) => {
-                              if (
-                                playingElement &&
-                                playingElement !== e.nativeEvent.target
-                              ) {
-                                playingElement.pause()
-                              }
-                              const element =
-                                (e.nativeEvent.target as HTMLAudioElement) ||
-                                (e.nativeEvent.target as HTMLVideoElement)
-                              if (element) {
-                                setPlayingElement(element)
-                              }
-                            }}
-                            addToCartEnabled={
-                              token.market?.floorAsk?.maker?.toLowerCase() !==
-                              address?.toLowerCase()
-                            }
-                          />
-                        ))}
-                  </Grid>
-                  {tokens.length == 0 && !isFetchingPage && (
-                    <Flex
-                      direction="column"
-                      align="center"
-                      css={{ py: '$6', gap: '$4' }}
-                    >
-                      <Text css={{ color: '$gray11' }}>
-                        <FontAwesomeIcon icon={faMagnifyingGlass} size="2xl" />
-                      </Text>
-                      <Text css={{ color: '$gray11' }}>No items found</Text>
-                    </Flex>
-                  )}
-                </Box>
-              </Flex>
-            </TabsContent>
-            <TabsContent value="details">
-              <CollectionDetails
-                collection={collection}
-                collectionId={id}
-                tokens={tokens}
-              />
-            </TabsContent>
-            <TabsContent value="activity">
-              <Flex
-                css={{
-                  gap: activityFiltersOpen ? '$5' : '',
-                  position: 'relative',
-                }}
-              >
-                {isSmallDevice ? (
-                  <MobileActivityFilters
-                    activityTypes={activityTypes}
-                    setActivityTypes={setActivityTypes}
-                  />
-                ) : (
-                  <ActivityFilters
-                    open={activityFiltersOpen}
-                    setOpen={setActivityFiltersOpen}
-                    activityTypes={activityTypes}
-                    setActivityTypes={setActivityTypes}
+          <TabsContent value="collections">
+            <Box css={{ height: '100%' }}>
+              <Flex direction="column">
+                {isSSR || !isMounted ? null : (
+                  <CollectionRankingsTable
+                    collections={trendingCollections || []}
+                    volumeKey={volumeKey}
+                    loading={isTrendingCollectionsValidating}
                   />
                 )}
                 <Box
                   css={{
-                    flex: 1,
-                    gap: '$4',
-                    pb: '$5',
+                    display: isTrendingCollectionsValidating ? 'none' : 'block',
                   }}
-                >
-                  {!isSmallDevice && (
-                    <FilterButton
-                      open={activityFiltersOpen}
-                      setOpen={setActivityFiltersOpen}
-                    />
-                  )}
-                  <CollectionActivityTable
-                    id={id}
-                    activityTypes={activityTypes}
-                  />
-                </Box>
+                />
               </Flex>
-            </TabsContent>
-          </Flex>
-        ) : (
-          <Box />
-        )}
-      </Tabs.Root>
+            </Box>
+          </TabsContent>
+
+          <TabsContent value="mints">
+            <Box css={{ height: '100%' }}>
+              <Flex direction="column">
+                {isSSR || !isMounted ? null : (
+                  <MintRankingsTable
+                    mints={trendingMints || []}
+                    loading={isTrendingMintsValidating}
+                  />
+                )}
+                <Box
+                  css={{
+                    display: isTrendingCollectionsValidating ? 'none' : 'block',
+                  }}
+                />
+              </Flex>
+            </Box>
+          </TabsContent>
+        </Tabs.Root>
+
+        <Box css={{ my: '$5' }}>
+          <Link href={`/${marketplaceChain.routePrefix}/${tab}/trending`}>
+            <Button>See More</Button>
+          </Link>
+        </Box>
+      </Box>
+
+      <Footer />
     </Layout>
   )
 }
 
+type TrendingCollectionsSchema =
+  paths['/collections/trending/v1']['get']['responses']['200']['schema']
+type TrendingMintsSchema =
+  paths['/collections/trending-mints/v1']['get']['responses']['200']['schema']
+
 export const getServerSideProps: GetServerSideProps<{
   ssr: {
-    collection?: paths['/collections/v7']['get']['responses']['200']['schema']
-    tokens?: paths['/tokens/v6']['get']['responses']['200']['schema']
-    hasAttributes: boolean
+    trendingMints: TrendingMintsSchema
+    trendingCollections: TrendingCollectionsSchema
+    featuredCollections: TrendingCollectionsSchema
   }
-  id: string | undefined
 }> = async ({ params, res }) => {
-  // 1) Hardcode your contract ID:
-  const id = '0x5ec559ce37f385fea579a1a0c4d02d71feb92f61'
-  // 2) Also optionally hardcode the chain or just use DefaultChain:
-  const { reservoirBaseUrl } = DefaultChain
+  const chainPrefix = params?.chain || ''
+  const { reservoirBaseUrl } =
+    supportedChains.find((chain) => chain.routePrefix === chainPrefix) ||
+    DefaultChain
 
   const headers: RequestInit = {
     headers: {
@@ -925,63 +308,99 @@ export const getServerSideProps: GetServerSideProps<{
     },
   }
 
-  let collectionQuery: paths['/collections/v7']['get']['parameters']['query'] =
+  // Example queries
+  let trendingCollectionsQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
     {
-      id,
-      includeSalesCount: true,
-      normalizeRoyalties: NORMALIZE_ROYALTIES,
+      period: '30d',
+      limit: 50,
+      sortBy: 'sales',
     }
 
-  const collectionsPromise = fetcher(
-    `${reservoirBaseUrl}/collections/v7`,
-    collectionQuery,
-    headers,
+  const trendingCollectionsPromise = fetcher(
+    `${reservoirBaseUrl}/collections/trending/v1`,
+    trendingCollectionsQuery,
+    headers
   )
 
-  let tokensQuery: paths['/tokens/v6']['get']['parameters']['query'] = {
-    collection: id,
-    sortBy: 'floorAskPrice',
-    sortDirection: 'asc',
-    limit: 5,
-    normalizeRoyalties: NORMALIZE_ROYALTIES,
-    includeDynamicPricing: true,
-    includeAttributes: true,
-    includeQuantity: true,
-    includeLastSale: true,
-  }
+  let featuredCollectionQuery: paths['/collections/trending/v1']['get']['parameters']['query'] =
+    {
+      period: '24h',
+      limit: 20,
+      sortBy: 'sales',
+    }
 
-  const tokensPromise = fetcher(
-    `${reservoirBaseUrl}/tokens/v6`,
-    tokensQuery,
-    headers,
+  const featuredCollectionsPromise = fetcher(
+    `${reservoirBaseUrl}/collections/trending/v1`,
+    featuredCollectionQuery,
+    headers
+  )
+
+  let trendingMintsQuery: paths['/collections/trending-mints/v1']['get']['parameters']['query'] =
+    {
+      period: '24h',
+      limit: 20,
+      type: 'any',
+    }
+
+  const trendingMintsPromise = fetcher(
+    `${reservoirBaseUrl}/collections/trending-mints/v1`,
+    trendingMintsQuery,
+    headers
   )
 
   const promises = await Promise.allSettled([
-    collectionsPromise,
-    tokensPromise,
-  ]).catch(() => {})
-  const collection: Props['ssr']['collection'] =
-    promises?.[0].status === 'fulfilled' && promises[0].value.data
-      ? (promises[0].value.data as Props['ssr']['collection'])
-      : {}
-  const tokens: Props['ssr']['tokens'] =
-    promises?.[1].status === 'fulfilled' && promises[1].value.data
-      ? (promises[1].value.data as Props['ssr']['tokens'])
+    trendingCollectionsPromise,
+    featuredCollectionsPromise,
+    trendingMintsPromise,
+  ])
+
+  console.log(
+    'Trending Collections:',
+    promises[0].status === 'fulfilled' ? promises[0].value.data : 'Failed to fetch'
+  )
+  // console.log('Featured Collections:', promises[1].status === 'fulfilled' ? promises[1].value.data : 'Failed to fetch');
+  // console.log('Trending Mints:', promises[2].status === 'fulfilled' ? promises[2].value.data : 'Failed to fetch');
+
+  const trendingCollections: TrendingCollectionsSchema =
+    promises[0].status === 'fulfilled' && promises[0].value.data
+      ? (promises[0].value.data as TrendingCollectionsSchema)
       : {}
 
-  const hasAttributes =
-    tokens?.tokens?.some(
-      (token) => (token?.token?.attributes?.length || 0) > 0,
-    ) || false
+  const featuredCollections: TrendingCollectionsSchema =
+    promises[1].status === 'fulfilled' && promises[1].value.data
+      ? (promises[1].value.data as TrendingCollectionsSchema)
+      : {}
+
+  const trendingMints: TrendingMintsSchema =
+    promises[2].status === 'fulfilled' && promises[2].value.data
+      ? (promises[2].value.data as TrendingMintsSchema)
+      : {}
+
+  // Example: Filter out non-ERC1155 from trendingCollections
+  const provider = new JsonRpcProvider(process.env.INFURA_API_URL)
+  if (trendingCollections.collections) {
+    const checks = await Promise.all(
+      trendingCollections.collections.map(async (collection) => {
+        // Non-null assertion (!) ensures string
+        const standard = await checkTokenStandard(collection.id!, provider)
+        return { ...collection, standard }
+      })
+    )
+    trendingCollections.collections = checks.filter(
+      (c) => c.standard === 'erc1155'
+    )
+  }
 
   res.setHeader(
     'Cache-Control',
-    'public, s-maxage=30, stale-while-revalidate=60',
+    'public, s-maxage=120, stale-while-revalidate=180'
   )
 
   return {
-    props: { ssr: { collection, tokens, hasAttributes }, id },
+    props: {
+      ssr: { trendingCollections, trendingMints, featuredCollections },
+    },
   }
 }
 
-export default CollectionPage
+export default Home
